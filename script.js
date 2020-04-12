@@ -20,6 +20,8 @@ var patterns = {
     [-2, 1], [-3, 1], [-4, 1], [-6, 2], [-6, 3], [-6, 4], [-4, 6], [-3, 6], [-2, 6], [-1, 4], [-1, 3], [-1, 2],
   ]
 }
+
+
 class Control {
   constructor(control, manager) {
     this.control = control;
@@ -96,6 +98,7 @@ class Control {
     }, parseInt(this.speed.value));
   }
 }
+
 
 class Cell {
   constructor(x, y, alive) {
