@@ -230,7 +230,7 @@ class Manager {
     var key = this.getKey(x, y);
     if(key in this.cells && toggle) {
       this.cells[key].alive = !this.cells[key].alive
-    } else if(!(key in this.cells)) {
+    } else {
       this.cells[key] = {
         x: x,
         y: y,
