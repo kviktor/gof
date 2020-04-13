@@ -100,39 +100,13 @@ class Control {
 }
 
 
-class Cell {
-  constructor(x, y, alive) {
-    this.x = x;
-    this.y = y;
-    this.alive = alive;
-  }
-
-  isNeighbour(cell) {
-    return Math.abs(cell.x - this.x) <= 1 && Math.abs(cell.y - this.y) <= 1 && cell.alive;
-  }
-
-  getNeighbours() {
-    return [
-      {x: this.x, y: this.y - 1},
-      {x: this.x + 1, y: this.y - 1},
-      {x: this.x + 1, y: this.y},
-      {x: this.x + 1, y: this.y + 1},
-      {x: this.x, y: this.y + 1},
-      {x: this.x - 1, y: this.y + 1},
-      {x: this.x - 1, y: this.y},
-      {x: this.x - 1, y: this.y - 1},
-    ]
-  }
-}
-
-
 class Manager {
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = this.canvas.getContext('2d');
     this.latestPerformance = null;
 
-    this.cells = [];
+    this.cells = {};
     const { width, height } = canvas.getBoundingClientRect();
     this.ctx.canvas.width  = width;
     this.ctx.canvas.height = height;
@@ -241,19 +215,26 @@ class Manager {
     return null;
   }
 
+  getKey(x, y) {
+    return x + ';' + y;
+  }
+
   add(x, y, toggle) {
-    var cell = this.getCell(x, y);
-    if(cell && toggle) {
-      cell.alive = false;
-    } else if(!cell) {
-      this.cells.push(new Cell(x, y, true));
+    var key = this.getKey(x, y);
+    if(key in this.cells && toggle) {
+      this.cells[key].alive = !this.cells[key].alive
+    } else if(!(key in this.cells)) {
+      this.cells[key] = {
+        x: x,
+        y: y,
+        alive: true,
+      };
     }
     this.redraw();
-    this.cells = this.cells.filter(function(value, index, array) { return value.alive; });
   }
 
   redraw() {
-    for(var i=0; i<this.cells.length; i++) {
+    for(var i in this.cells) {
       this.drawCell(this.cells[i]);
     }
   }
@@ -279,69 +260,86 @@ class Manager {
     this.drawCellByXY(cell.x, cell.y, color);
   }
 
+  isAlive(alive, aliveNeighbourCount) {
+    if(alive) {
+      if(aliveNeighbourCount >= 2 && aliveNeighbourCount <= 3) {
+        return true;
+      } else {
+        return false;
+      }
+    } else {
+      if(aliveNeighbourCount == 3) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+
   simulate() {
     var t0 = performance.now();
-    var aliveToCheck = {};
-    var deadToCheck = {};
+    var newCells = JSON.parse(JSON.stringify(this.cells))
+    var neighbours = [
+      {x: 0, y: -1},
+      {x: 1, y: -1},
+      {x: 1, y: 0},
+      {x: 1, y: 1},
+      {x: 0, y: 1},
+      {x: -1, y: 1},
+      {x: -1, y: 0},
+      {x: -1, y: -1},
+    ]
+
+    var aliveCellNeighbourCount, deadCellNeighbourCount;
+    var cell, n, deadX, deadY, nk, innerKey, outerKey;
 
     for(var i in this.cells) {
-      var cell = this.cells[i];
-      aliveToCheck[cell.x + ';' + cell.y] = cell;
+      aliveCellNeighbourCount = 0;
+      cell = this.cells[i];
 
-      var neighbours = cell.getNeighbours();
-      for(var j=0; j<neighbours.length; j++) {
-        var neighbour = neighbours[j];
-        var key = neighbour.x + ';' + neighbour.y;
-        deadToCheck[key] = new Cell(neighbour.x, neighbour.y, false);
-      }
-    }
+      for(var aliveN in neighbours) {
+        n = neighbours[aliveN];
+        deadX = cell.x + n.x;
+        deadY = cell.y + n.y;
+        outerKey = this.getKey(deadX, deadY);
 
-    for(var i in aliveToCheck) {
-      if(i in deadToCheck) {
-        delete deadToCheck[i];
-      }
-    }
+        if(!(outerKey in newCells)) {
+          deadCellNeighbourCount = 0;
+          for(var deadN in neighbours) {
+            nk = neighbours[deadN];
+            innerKey = this.getKey(deadX + nk.x, deadY + nk.y);
 
-    var new_cells = [];
-    var mergedCheck = Object.assign({}, aliveToCheck, deadToCheck);
+            if(innerKey in this.cells && this.cells[innerKey].alive) {
+              deadCellNeighbourCount += 1;
+            }
 
-    var sortedAliveToCheck = [];
-    for(var i in aliveToCheck) {
-      sortedAliveToCheck.push(aliveToCheck[i]);
-    }
-    sortedAliveToCheck.sort((a, b) => (a.x > b.x) ? 1 : -1)
+          }
 
-    for(const outer_key in mergedCheck) {
-      var outer_cell = mergedCheck[outer_key];
-      var neighbours = 0;
-      for(const inner_key in sortedAliveToCheck) {
-        var inner_cell = sortedAliveToCheck[inner_key];
-        if(outer_cell == inner_cell) continue;
-        if(outer_cell.x < (inner_cell.x - 1)) break;
+          newCells[outerKey] = {
+            x: deadX,
+            y: deadY,
+            alive: this.isAlive(false, deadCellNeighbourCount),
+          }
 
-        neighbours += outer_cell.isNeighbour(inner_cell);
-      }
-
-      if(outer_cell.alive) {
-        if(neighbours >= 2 && neighbours <= 3) {
-          new_cells.push(new Cell(outer_cell.x, outer_cell.y, true));
+        } else if(this.cells[outerKey] && this.cells[outerKey].alive) {
+          aliveCellNeighbourCount += 1;
         }
-      } else {
-        if(neighbours == 3) {
-          new_cells.push(new Cell(outer_cell.x, outer_cell.y, true));
-        }
+
       }
+
+      newCells[this.getKey(cell.x, cell.y)].alive = this.isAlive(true, aliveCellNeighbourCount);
     }
 
-    /* clear old generation */
-    for(var i in this.cells) {
-      this.cells[i].alive = false;
-    }
+    /* redraw with dead cell info still in so they are cleared off the screen */
+    this.cells = newCells;
     this.redraw();
 
-    /* populate grid with new generation */
-    this.cells = new_cells;
-    this.redraw();
+    var filtered = Object.keys(newCells).reduce(function (filtered, key) {
+        if (newCells[key].alive) filtered[key] = newCells[key];
+        return filtered;
+    }, {});
+
+    this.cells = filtered;
 
     this.latestPerformance = performance.now() -t0;
   }
